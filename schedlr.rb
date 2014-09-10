@@ -8,61 +8,53 @@ TITLE = 0
 LENGTH = 1
 LONG_SIZE = 2  # factors to a unit
 SHORT_SIZE = 1 # of time, e.g 15mins
-SLOT_LIMIT = 25
+
+$short_flag = 0 # keeps track of next 
+$long_flag = 0  # (possibly) available slot
 
 
-$flag = 0 # keeps track of next (possibly) available short slot
 
-def big_enough_for_long? session, slot_index, schedule
-  index = slot_index
-  until index >= slot_index+LONG_SIZE
-    if schedule[index] == :break
-      return false, index+1
+def prepare_slot_flags(session, schedule)
+  case session[LENGTH]
+  when :short
+    until !schedule[$short_flag]
+      $short_flag+=1
     end
-    index+=1
-  end
-  return true, slot_index
-end
 
-def allot_long session, slot_index, schedule
-  index = slot_index
-  until index >= slot_index+LONG_SIZE
-    schedule[index] = session[TITLE]
-    index+=1
-  end
-  return index
-end
-
-def assign session, slot_index, schedule
-  if session == nil
-    schedule.push :break
-    return slot_index+1
-  elsif session[LENGTH] == :short
-    index=$flag
-    until index > SLOT_LIMIT
-      unless schedule[index]
-        schedule[index] = session[TITLE]
-        $flag = index+1
-        break
+  when :long
+    for index in $long_flag..$long_flag+LONG_SIZE-1
+      if schedule[index]
+        $long_flag = index+1
+        prepare_slot_flags(session, schedule)
       end
+    end
+  end
+end
+
+
+def allot_slot(session, schedule)
+  case session[LENGTH]
+  when :short 
+    schedule[$short_flag] = session[TITLE]
+  when :long 
+    index = $long_flag
+    until index >= $long_flag + LONG_SIZE
+      schedule[index] = session[TITLE] 
       index+=1
     end
-    if index == slot_index
-      return index+1
-    end
-    return slot_index
-  elsif session[LENGTH] = :long
-    enough_capacity = big_enough_for_long? session, slot_index, schedule
-    if enough_capacity[0]
-      return allot_long(session, slot_index, schedule)
-    else
-      assign session, enough_capacity[1], schedule
-    end
+    $long_flag = index
   end
+end
+
+
+def assign(session, schedule)
+
+  prepare_slot_flags(session, schedule) # refresh slot to figure where session goes
+  allot_slot(session, schedule)
+
 end
 
 def schedule
-  # initialize schedule; also, add break slots
   schedule = []
   schedule[3] = :break
   schedule[5]  = :break
@@ -81,18 +73,15 @@ def schedule
                   ["joomla", :long],
                   ["isabelle", :short]
                ]
-
-  slot_index = 0
-
-  until slot_index >= SLOT_LIMIT
-    if schedule[slot_index] == :break
-      slot_index+=1
-    else
-      slot_index = assign popularity.pop, slot_index, schedule
-    end
+  
+  session = popularity.pop 
+  # assign slots till no more sessions are left
+  until session == nil 
+    assign session, schedule
+    session = popularity.pop
   end
+
   print schedule
 end
 
 schedule()
-
